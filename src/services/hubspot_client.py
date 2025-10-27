@@ -8,6 +8,7 @@ import logging
 import httpx
 from pathlib import Path
 import asyncio
+import json
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ class HubSpotService:
                     upload_url,
                     headers={"Authorization": f"Bearer {self.access_token}"},
                     files=files,
-                    data={'options': str(data['options'])}
+                    data={'options': json.dumps(data['options'])}
                 )
 
                 if response.status_code not in [200, 201]:

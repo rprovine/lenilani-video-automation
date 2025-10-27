@@ -29,7 +29,8 @@ class Veo3Service:
         prompt: str,
         duration: int = 8,
         output_path: Optional[str] = None,
-        aspect_ratio: str = "9:16"
+        aspect_ratio: str = "9:16",
+        max_retries: int = 3
     ) -> Dict[str, Any]:
         """
         Generate a single video clip using Google Veo 3.
@@ -39,97 +40,144 @@ class Veo3Service:
             duration: Video duration in seconds (4, 6, or 8)
             output_path: Optional local path to save the video
             aspect_ratio: Video aspect ratio ("9:16" or "16:9")
+            max_retries: Maximum number of retries for transient failures
 
         Returns:
             Dict with success status, video_data, and output_path
         """
-        try:
-            logger.info(f"Generating {duration}s video clip with Veo 3...")
-            logger.info(f"Prompt: {prompt[:150]}...")
+        last_error = None
 
-            # Start video generation operation
-            # Note: Pass aspect_ratio in prompt for now as API config support is limited
-            # Add aspect ratio instruction to prompt
-            enhanced_prompt = f"{prompt}\n\nIMPORTANT: Generate in {aspect_ratio} aspect ratio (vertical portrait format)." if aspect_ratio == "9:16" else prompt
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    wait_time = 2 ** attempt * 30  # 30s, 60s, 120s
+                    logger.info(f"Retry attempt {attempt + 1}/{max_retries} after {wait_time}s wait...")
+                    await asyncio.sleep(wait_time)
 
-            operation = self.client.models.generate_videos(
-                model="veo-3.0-generate-preview",
-                prompt=enhanced_prompt
-            )
+                logger.info(f"Generating {duration}s video clip with Veo 3...")
+                logger.info(f"Prompt: {prompt[:150]}...")
 
-            logger.info(f"Video generation operation started: {operation.name}")
+                # Start video generation operation
+                # Note: Pass aspect_ratio in prompt for now as API config support is limited
+                # Add aspect ratio instruction to prompt
+                enhanced_prompt = f"{prompt}\n\nIMPORTANT: Generate in {aspect_ratio} aspect ratio (vertical portrait format)." if aspect_ratio == "9:16" else prompt
 
-            # Poll for completion (runs in executor to not block)
-            def poll_operation():
-                while not operation.done:
-                    logger.info("Waiting for video generation...")
-                    time.sleep(10)
-                    # Refresh operation status
-                    refreshed_op = self.client.operations.get(operation)
-                    if refreshed_op.done:
-                        return refreshed_op
-                return operation
+                operation = self.client.models.generate_videos(
+                    model="veo-3.0-generate-preview",
+                    prompt=enhanced_prompt
+                )
 
-            # Run polling in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            completed_operation = await loop.run_in_executor(None, poll_operation)
+                logger.info(f"Video generation operation started: {operation.name}")
 
-            logger.info("Video generation completed!")
+                # Poll for completion (runs in executor to not block)
+                def poll_operation():
+                    while not operation.done:
+                        logger.info("Waiting for video generation...")
+                        time.sleep(10)
+                        # Refresh operation status
+                        refreshed_op = self.client.operations.get(operation)
+                        if refreshed_op.done:
+                            return refreshed_op
+                    return operation
 
-            # Get the generated video from response
-            if completed_operation.response and completed_operation.response.generated_videos:
-                generated_video = completed_operation.response.generated_videos[0]
-                video_uri = generated_video.video.uri
+                # Run polling in thread pool to avoid blocking
+                loop = asyncio.get_event_loop()
+                completed_operation = await loop.run_in_executor(None, poll_operation)
 
-                logger.info(f"Video URI: {video_uri}")
+                logger.info("Video generation completed!")
 
-                if output_path:
-                    # Extract file name/ID from URI
-                    # URI format: https://generativelanguage.googleapis.com/v1beta/files/FILE_ID:download?alt=media
-                    file_name = video_uri.split('/files/')[1].split(':')[0]
-                    logger.info(f"Downloading file: {file_name}")
+                # Log operation details for debugging
+                logger.info(f"Operation done: {completed_operation.done}")
+                logger.info(f"Operation response: {completed_operation.response}")
+                if completed_operation.error:
+                    error_msg = completed_operation.error
+                    logger.error(f"Operation error: {error_msg}")
 
-                    # Download using SDK's file download method
-                    def download_file():
-                        video_file = self.client.files.get(name=file_name)
-                        video_data = self.client.files.download(file=video_file)
-                        return video_data
+                    # Check if it's a retryable error (code 13 = INTERNAL)
+                    if hasattr(error_msg, 'code') and error_msg.code == 13 and attempt < max_retries - 1:
+                        logger.warning(f"Retryable error detected (code 13), will retry...")
+                        last_error = error_msg
+                        continue
+                    elif hasattr(error_msg, 'get') and error_msg.get('code') == 13 and attempt < max_retries - 1:
+                        logger.warning(f"Retryable error detected (code 13), will retry...")
+                        last_error = error_msg
+                        continue
+                    else:
+                        raise Exception(f"Video generation failed: {error_msg}")
 
-                    # Run in executor to not block
-                    loop = asyncio.get_event_loop()
-                    video_data = await loop.run_in_executor(None, download_file)
+                # Get the generated video from response
+                if completed_operation.response and completed_operation.response.generated_videos:
+                    generated_video = completed_operation.response.generated_videos[0]
+                    video_uri = generated_video.video.uri
 
-                    logger.info(f"Downloaded video: {len(video_data)} bytes")
+                    logger.info(f"Video URI: {video_uri}")
 
-                    # Save to output path
-                    with open(output_path, 'wb') as f:
-                        f.write(video_data)
+                    if output_path:
+                        # Extract file name/ID from URI
+                        # URI format: https://generativelanguage.googleapis.com/v1beta/files/FILE_ID:download?alt=media
+                        file_name = video_uri.split('/files/')[1].split(':')[0]
+                        logger.info(f"Downloading file: {file_name}")
 
-                    logger.info(f"Saved generated video to {output_path}")
+                        # Download using SDK's file download method
+                        def download_file():
+                            video_file = self.client.files.get(name=file_name)
+                            video_data = self.client.files.download(file=video_file)
+                            return video_data
 
-                    return {
-                        "success": True,
-                        "video_data": video_data,
-                        "output_path": output_path,
-                        "duration": duration
-                    }
+                        # Run in executor to not block
+                        loop = asyncio.get_event_loop()
+                        video_data = await loop.run_in_executor(None, download_file)
+
+                        logger.info(f"Downloaded video: {len(video_data)} bytes")
+
+                        # Save to output path
+                        with open(output_path, 'wb') as f:
+                            f.write(video_data)
+
+                        logger.info(f"Saved generated video to {output_path}")
+
+                        return {
+                            "success": True,
+                            "video_data": video_data,
+                            "output_path": output_path,
+                            "duration": duration
+                        }
+                    else:
+                        # Just return the URI
+                        return {
+                            "success": True,
+                            "video_uri": video_uri,
+                            "duration": duration
+                        }
                 else:
-                    # Just return the URI
-                    return {
-                        "success": True,
-                        "video_uri": video_uri,
-                        "duration": duration
-                    }
-            else:
-                raise Exception("No video in operation response")
+                    # No video in response - might be retryable
+                    if attempt < max_retries - 1:
+                        logger.warning(f"No video in response, will retry...")
+                        last_error = "No video in operation response"
+                        continue
+                    else:
+                        raise Exception("No video in operation response")
 
-        except Exception as e:
-            logger.error(f"Error generating video: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "message": f"Video generation failed: {str(e)}"
-            }
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Error on attempt {attempt + 1}: {e}")
+                    last_error = e
+                    continue
+                else:
+                    logger.error(f"Error generating video after {max_retries} attempts: {e}", exc_info=True)
+                    return {
+                        "success": False,
+                        "error": str(e),
+                        "message": f"Video generation failed after {max_retries} attempts: {str(e)}"
+                    }
+
+        # If we get here, all retries failed
+        logger.error(f"All {max_retries} retry attempts failed. Last error: {last_error}")
+        return {
+            "success": False,
+            "error": str(last_error),
+            "message": f"Video generation failed after {max_retries} attempts"
+        }
 
     async def generate_multi_clip_video(
         self,
