@@ -121,6 +121,7 @@ async def generate_now(request: GenerateVideoRequest):
     return await generate_video(request)
 
 # Cron endpoint - Daily video generation
+@app.get("/cron/daily-video")
 @app.post("/cron/daily-video")
 async def daily_video_cron():
     """
