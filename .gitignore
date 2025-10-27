@@ -67,6 +67,7 @@ temp/
 .pytest_cache/
 .coverage
 htmlcov/
+test_*.py
 
 # FFmpeg temp files
 *.ffconcat
