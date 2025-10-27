@@ -7,6 +7,7 @@ import subprocess
 import logging
 from typing import List, Optional
 from pathlib import Path
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -120,8 +121,8 @@ class VideoComposer:
         image_path: str,
         output_path: str,
         duration: float = 3.0,
-        width: int = 1080,
-        height: int = 1920
+        width: int = None,
+        height: int = None
     ) -> dict:
         """
         Convert a static image to a video clip (for title cards).
@@ -130,12 +131,17 @@ class VideoComposer:
             image_path: Path to the image
             output_path: Path for the output video
             duration: Duration of the video in seconds
-            width: Video width (default 1080 for 9:16)
-            height: Video height (default 1920 for 9:16)
+            width: Video width (default from config settings)
+            height: Video height (default from config settings)
 
         Returns:
             Dict with success status and output path
         """
+        # Use config defaults if not specified
+        if width is None:
+            width = settings.video_width
+        if height is None:
+            height = settings.video_height
         try:
             logger.info(f"Converting image to {duration}s video clip...")
 

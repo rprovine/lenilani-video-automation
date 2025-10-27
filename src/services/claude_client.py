@@ -262,7 +262,7 @@ Clip 1 (8 sec): THE HOOK - Establish the problem/opportunity with stunning visua
 Clip 2 (8 sec): THE SOLUTION - Show the transformation/possibility in action
 Clip 3 (8 sec): THE PAYOFF - Deliver emotional impact and hint at CTA
 
-Format: 9:16 vertical video for social media (Instagram Reels, TikTok, YouTube Shorts)
+Format: 16:9 widescreen landscape video for YouTube (high quality cinematic production)
 
 Company: {settings.company_name}
 Website: {settings.company_website}
@@ -348,7 +348,7 @@ The title card should include space for:
 Design requirements:
 - Professional, modern, clean design
 - Hawaiian/tropical aesthetic (ocean colors, palm motifs, island vibes)
-- 9:16 aspect ratio for vertical video
+- 16:9 aspect ratio for widescreen landscape video
 - Clear hierarchy with readable text areas
 - Vibrant but professional color palette
 - Space for overlay text (we'll add text in post-production)

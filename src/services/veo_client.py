@@ -29,7 +29,7 @@ class Veo3Service:
         prompt: str,
         duration: int = 8,
         output_path: Optional[str] = None,
-        aspect_ratio: str = "9:16",
+        aspect_ratio: str = None,
         max_retries: int = 3
     ) -> Dict[str, Any]:
         """
@@ -39,12 +39,15 @@ class Veo3Service:
             prompt: Detailed cinematic prompt for the video
             duration: Video duration in seconds (4, 6, or 8)
             output_path: Optional local path to save the video
-            aspect_ratio: Video aspect ratio ("9:16" or "16:9")
+            aspect_ratio: Video aspect ratio (uses config default if None)
             max_retries: Maximum number of retries for transient failures
 
         Returns:
             Dict with success status, video_data, and output_path
         """
+        # Use config default if not specified
+        if aspect_ratio is None:
+            aspect_ratio = settings.aspect_ratio
         last_error = None
 
         for attempt in range(max_retries):
@@ -59,8 +62,9 @@ class Veo3Service:
 
                 # Start video generation operation
                 # Note: Pass aspect_ratio in prompt for now as API config support is limited
-                # Add aspect ratio instruction to prompt
-                enhanced_prompt = f"{prompt}\n\nIMPORTANT: Generate in {aspect_ratio} aspect ratio (vertical portrait format)." if aspect_ratio == "9:16" else prompt
+                # Add aspect ratio instruction to prompt with format description
+                format_desc = "widescreen landscape format" if aspect_ratio == "16:9" else "vertical portrait format"
+                enhanced_prompt = f"{prompt}\n\nIMPORTANT: Generate in {aspect_ratio} aspect ratio ({format_desc}). High quality, cinematic production value."
 
                 operation = self.client.models.generate_videos(
                     model="veo-3.0-generate-preview",
