@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     # Video Settings
     video_duration: int = 30  # Total video duration in seconds
     clip_duration: int = 8    # Individual clip duration
-    num_clips: int = 3        # Number of clips per video
+    num_clips: int = 1        # Number of clips per video (reduced for faster generation)
     aspect_ratio: str = "16:9"  # Video aspect ratio (16:9 for YouTube landscape)
     video_width: int = 1920   # Video width in pixels (1080p for high quality)
     video_height: int = 1080  # Video height in pixels
